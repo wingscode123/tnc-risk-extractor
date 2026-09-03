@@ -1,0 +1,6 @@
+{
+  "name": "Analisis Dokumen Legal",
+  "description": "Alat analisis dokumen legal otomatis untuk mendeteksi klausul berisiko, jebakan ToS, dan pasal merugikan konsumen secara terstruktur.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
