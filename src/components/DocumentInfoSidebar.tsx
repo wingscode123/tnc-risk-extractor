@@ -74,7 +74,12 @@ export const DocumentInfoSidebar: React.FC<DocumentInfoSidebarProps> = ({
             </p>
           </div>
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-700">Skor Keamanan</span>
+            <span
+              className="text-sm font-medium text-slate-700 underline decoration-dotted underline-offset-2 cursor-help"
+              title="Skor heuristik sementara: 100 − 25 per risiko Tinggi − 12 per risiko Sedang. Skor resmi dari AI menyusul di Fase 4."
+            >
+              Skor Estimasi (beta)
+            </span>
             <span className={`text-xl font-bold ${scoreColor}`}>
               {safetyScore !== null ? `${safetyScore}/100` : "--/100"}
             </span>

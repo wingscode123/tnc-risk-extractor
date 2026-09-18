@@ -22,6 +22,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<HasilAnalisis | null>(null);
+  const [quotaSignal, setQuotaSignal] = useState<number>(0);
 
   const handleAnalyze = async () => {
     if (!inputText.trim()) return;
@@ -68,6 +69,7 @@ export default function App() {
       setError(err.message || "Gagal menghubungi server analisis.");
     } finally {
       setIsLoading(false);
+      setQuotaSignal((s) => s + 1);
     }
   };
 
@@ -99,6 +101,7 @@ export default function App() {
         setCurrentTab={setCurrentTab}
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        quotaRefreshSignal={quotaSignal}
       />
 
       {/* Main Content Area */}

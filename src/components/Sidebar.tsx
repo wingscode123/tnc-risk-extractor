@@ -1,11 +1,13 @@
 import React from "react";
 import { FileText, History, BookOpen, Shield, Sparkles, CheckCircle } from "lucide-react";
+import { QuotaCard } from "./QuotaCard";
 
 interface SidebarProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
+  quotaRefreshSignal?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -13,6 +15,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setCurrentTab,
   isOpenMobile = false,
   onCloseMobile,
+  quotaRefreshSignal = 0,
 }) => {
   return (
     <>
@@ -151,23 +154,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </nav>
 
-        {/* Pro Plan Quota Card matching Design HTML */}
+        {/* Kuota harian real dari server (ganti dummy Paket Pro) */}
         <div className="p-5 border-t border-slate-800/80">
-          <div className="bg-slate-800/80 rounded-lg p-3.5 text-xs text-slate-400 border border-slate-700/50">
-            <div className="flex items-center justify-between mb-2">
-              <p className="font-semibold text-slate-200">Paket Pro Aktif</p>
-              <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-medium">
-                Aktif
-              </span>
-            </div>
-            <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
-              <div className="bg-blue-500 w-3/4 h-full rounded-full"></div>
-            </div>
-            <p className="mt-2 text-[11px] text-slate-400 flex items-center justify-between">
-              <span>Kuota Pemindaian</span>
-              <span className="font-mono text-slate-300">75/100 Dokumen</span>
-            </p>
-          </div>
+          <QuotaCard refreshSignal={quotaRefreshSignal} />
         </div>
       </aside>
     </>

@@ -10,7 +10,9 @@ interface RiskCardProps {
 export const RiskCard: React.FC<RiskCardProps> = ({ item, index }) => {
   const [copied, setCopied] = useState(false);
 
-  const isHighRisk = item.tingkat_risiko?.toLowerCase().includes("tinggi");
+  const level = item.tingkat_risiko?.toLowerCase() ?? "";
+  const isHighRisk = level.includes("tinggi");
+  const isLowRisk = level.includes("rendah");
 
   const handleCopy = () => {
     navigator.clipboard.writeText(
@@ -26,6 +28,8 @@ export const RiskCard: React.FC<RiskCardProps> = ({ item, index }) => {
       className={`p-4 rounded-lg border transition-all duration-150 ${
         isHighRisk
           ? "border-red-200 bg-red-50/30 hover:border-red-300"
+          : isLowRisk
+          ? "border-emerald-200 bg-emerald-50/30 hover:border-emerald-300"
           : "border-orange-200 bg-orange-50/30 hover:border-orange-300"
       }`}
     >
@@ -36,6 +40,8 @@ export const RiskCard: React.FC<RiskCardProps> = ({ item, index }) => {
             className={`text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
               isHighRisk
                 ? "text-red-600 bg-red-100"
+                : isLowRisk
+                ? "text-emerald-700 bg-emerald-100"
                 : "text-orange-600 bg-orange-100"
             }`}
           >

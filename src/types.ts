@@ -1,6 +1,6 @@
 export interface ItemRisiko {
   pasal_terkait: string;
-  tingkat_risiko: "Tinggi" | "Sedang" | string;
+  tingkat_risiko: "Tinggi" | "Sedang" | "Rendah" | string;
   penjelasan_bahasa_manusia: string;
 }
 

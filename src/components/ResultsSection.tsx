@@ -10,7 +10,7 @@ interface ResultsSectionProps {
 
 export const ResultsSection: React.FC<ResultsSectionProps> = ({ result }) => {
   const [activeTab, setActiveTab] = useState<"visual" | "json">("visual");
-  const [filterLevel, setFilterLevel] = useState<"all" | "Tinggi" | "Sedang">("all");
+  const [filterLevel, setFilterLevel] = useState<"all" | "Tinggi" | "Sedang" | "Rendah">("all");
 
   const items = result.daftar_risiko || [];
   const highCount = items.filter((item) =>
@@ -18,6 +18,9 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result }) => {
   ).length;
   const mediumCount = items.filter((item) =>
     item.tingkat_risiko?.toLowerCase().includes("sedang")
+  ).length;
+  const lowCount = items.filter((item) =>
+    item.tingkat_risiko?.toLowerCase().includes("rendah")
   ).length;
 
   const filteredItems = items.filter((item) => {
@@ -121,6 +124,18 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result }) => {
               }`}
             >
               Sedang ({mediumCount})
+            </button>
+            <button
+              id="filter-rendah"
+              type="button"
+              onClick={() => setFilterLevel("Rendah")}
+              className={`px-2.5 py-0.5 rounded text-xs transition-colors ${
+                filterLevel === "Rendah"
+                  ? "bg-emerald-600 text-white font-medium"
+                  : "bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+              }`}
+            >
+              Rendah ({lowCount})
             </button>
           </div>
 
