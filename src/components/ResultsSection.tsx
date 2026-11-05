@@ -3,6 +3,7 @@ import { LayoutGrid, Code, CheckCircle2 } from "lucide-react";
 import { HasilAnalisis } from "../types";
 import { RiskCard } from "./RiskCard";
 import { JsonViewer } from "./JsonViewer";
+import { riskSummary } from "../analysis";
 
 interface ResultsSectionProps {
   result: HasilAnalisis;
@@ -10,22 +11,19 @@ interface ResultsSectionProps {
 
 export const ResultsSection: React.FC<ResultsSectionProps> = ({ result }) => {
   const [activeTab, setActiveTab] = useState<"visual" | "json">("visual");
-  const [filterLevel, setFilterLevel] = useState<"all" | "Tinggi" | "Sedang" | "Rendah">("all");
+  const [filterLevel, setFilterLevel] = useState<
+    "all" | "Tinggi" | "Sedang" | "Rendah"
+  >("all");
 
   const items = result.daftar_risiko || [];
-  const highCount = items.filter((item) =>
-    item.tingkat_risiko?.toLowerCase().includes("tinggi")
-  ).length;
-  const mediumCount = items.filter((item) =>
-    item.tingkat_risiko?.toLowerCase().includes("sedang")
-  ).length;
-  const lowCount = items.filter((item) =>
-    item.tingkat_risiko?.toLowerCase().includes("rendah")
-  ).length;
+  const summary = riskSummary(result);
+  const highCount = summary.Tinggi;
+  const mediumCount = summary.Sedang;
+  const lowCount = summary.Rendah;
 
   const filteredItems = items.filter((item) => {
     if (filterLevel === "all") return true;
-    return item.tingkat_risiko?.toLowerCase().includes(filterLevel.toLowerCase());
+    return item.tingkat_risiko === filterLevel;
   });
 
   const hasHighRisk = highCount > 0;
@@ -39,7 +37,7 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result }) => {
       <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
         <div className="flex items-center gap-2.5">
           <h2 className="font-bold text-slate-800 text-sm sm:text-base">
-            Daftar Temuan Risiko (Strict JSON Output)
+            Daftar Temuan Risiko
           </h2>
           <span
             className={`text-xs font-medium px-2 py-0.5 rounded-full ${
@@ -48,7 +46,7 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result }) => {
                 : "bg-emerald-100 text-emerald-700"
             }`}
           >
-            {items.length > 0 ? "Analisis Selesai" : "Bersih / Aman"}
+            {items.length > 0 ? "Analisis Selesai" : "Tidak ada temuan"}
           </span>
         </div>
 
@@ -153,14 +151,21 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({ result }) => {
           <div className="p-8 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
             <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto mb-2" />
             <h3 className="text-sm font-bold text-slate-800">
-              Tidak Ditemukan Klausul Berbahaya
+              Tidak ada risiko yang terdeteksi
             </h3>
             <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-              Berdasarkan 5 parameter klausul jebakan, dokumen tidak memuat klausul yang memberatkan pengguna secara sepihak.
+              Tidak ada temuan pada lima fokus pemeriksaan. AI dapat melewatkan
+              konteks; hasil ini bukan jaminan keamanan. Tetap baca dokumen
+              asli.
             </p>
           </div>
         ) : (
           <div id="risk-cards-grid" className="space-y-3.5">
+            {filteredItems.length === 0 && (
+              <p className="text-sm text-slate-500">
+                Tidak ada temuan pada filter ini.
+              </p>
+            )}
             {filteredItems.map((item, idx) => (
               <RiskCard key={idx} item={item} index={idx} />
             ))}

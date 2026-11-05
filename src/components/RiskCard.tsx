@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React from "react";
 import { Copy, Check } from "lucide-react";
 import { ItemRisiko } from "../types";
+import { useClipboard } from "./useClipboard";
 
 interface RiskCardProps {
   item: ItemRisiko;
@@ -8,18 +9,17 @@ interface RiskCardProps {
 }
 
 export const RiskCard: React.FC<RiskCardProps> = ({ item, index }) => {
-  const [copied, setCopied] = useState(false);
+  const { status, copy } = useClipboard();
+  const copied = status === "Tersalin";
 
   const level = item.tingkat_risiko?.toLowerCase() ?? "";
   const isHighRisk = level.includes("tinggi");
   const isLowRisk = level.includes("rendah");
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(
-      `[${item.tingkat_risiko}] ${item.pasal_terkait}\nPenjelasan: ${item.penjelasan_bahasa_manusia}`
+    void copy(
+      `[${item.tingkat_risiko}] ${item.pasal_terkait}\nPenjelasan: ${item.penjelasan_bahasa_manusia}`,
     );
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -29,8 +29,8 @@ export const RiskCard: React.FC<RiskCardProps> = ({ item, index }) => {
         isHighRisk
           ? "border-red-200 bg-red-50/30 hover:border-red-300"
           : isLowRisk
-          ? "border-emerald-200 bg-emerald-50/30 hover:border-emerald-300"
-          : "border-orange-200 bg-orange-50/30 hover:border-orange-300"
+            ? "border-emerald-200 bg-emerald-50/30 hover:border-emerald-300"
+            : "border-orange-200 bg-orange-50/30 hover:border-orange-300"
       }`}
     >
       <div className="flex justify-between items-start mb-2.5">
@@ -41,8 +41,8 @@ export const RiskCard: React.FC<RiskCardProps> = ({ item, index }) => {
               isHighRisk
                 ? "text-red-600 bg-red-100"
                 : isLowRisk
-                ? "text-emerald-700 bg-emerald-100"
-                : "text-orange-600 bg-orange-100"
+                  ? "text-emerald-700 bg-emerald-100"
+                  : "text-orange-600 bg-orange-100"
             }`}
           >
             {item.tingkat_risiko || (isHighRisk ? "Tinggi" : "Sedang")}
@@ -64,7 +64,9 @@ export const RiskCard: React.FC<RiskCardProps> = ({ item, index }) => {
             {copied ? (
               <>
                 <Check className="h-3 w-3 text-emerald-600" />
-                <span className="text-[11px] text-emerald-700 font-medium">Tersalin</span>
+                <span className="text-[11px] text-emerald-700 font-medium">
+                  Tersalin
+                </span>
               </>
             ) : (
               <>
@@ -81,9 +83,16 @@ export const RiskCard: React.FC<RiskCardProps> = ({ item, index }) => {
       </p>
 
       <p className="text-xs text-slate-600 leading-relaxed italic">
-        <span className="font-semibold text-slate-700 not-italic">Penjelasan: </span>
+        <span className="font-semibold text-slate-700 not-italic">
+          Penjelasan:{" "}
+        </span>
         {item.penjelasan_bahasa_manusia}
       </p>
+      {status && (
+        <p role="status" className="mt-2 text-xs text-slate-600">
+          {status}
+        </p>
+      )}
     </div>
   );
 };

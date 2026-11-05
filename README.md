@@ -1,86 +1,117 @@
-# LexGuard AI — Analisis Dokumen Legal
+# LexGuard AI
 
-Alat analisis dokumen legal otomatis untuk mendeteksi klausul berisiko pada Syarat & Ketentuan (ToS), kebijakan privasi, dan kontrak. Backend Express memanggil Gemini (Strict JSON `{ daftar_risiko[] }`) untuk 5 kategori klausul jebakan; frontend React menampilkan temuan sebagai kartu risiko, statistik, dan JSON yang dapat diekspor.
+Alat bantu membaca syarat layanan, kebijakan privasi, dan kontrak dalam bahasa
+Indonesia. React menampilkan kutipan dan penjelasan risiko dari Gemini melalui
+API Express. Hasil bukan nasihat hukum atau jaminan keamanan dokumen.
 
-> Bukan nasihat hukum. Hasil analisis bersifat informatif dan bukan pengganti konsultasi advokat.
+## Mulai lokal
 
-## Fitur
+Gunakan Node.js 22.13+ atau 24+ dan npm. Dari directory project:
 
-- Analisis teks ToS/kontrak menjadi `daftar_risiko[]` (Tinggi / Sedang / Rendah) via `POST /api/analyze`
-- Kuota tamu harian 3x (server, berbasis hash IP) + rate-limit 10 req/10 mnt/IP
-- Cache hasil 24 jam (hash SHA256, LRU in-memory) dengan header `X-Cache: HIT/MISS`
-- `QuotaCard` real di sidebar (menggantikan data dummy), baca `GET /api/quotas/me`
-- Skor Estimasi (beta) + tooltip heuristik; filter Tinggi/Sedang/Rendah
-- Ekspor JSON (header + JsonViewer), salin temuan per kartu
-- Contoh dokumen bawaan + tab Riwayat/Template (Riwayat real per-user menyusul di Fase 2)
-
-## Tech Stack
-
-- Frontend: React 19, Vite 6, Tailwind CSS 4, lucide-react
-- Backend: Express 4, `helmet`, `cors`, `express-rate-limit`, `lru-cache`, `dotenv`
-- AI: `@google/genai` (Gemini Flash, fallback antar model)
-- Test: `node:test` + `node:assert` via `tsx --test`
-
-## Struktur
-
-```
-server.ts                  # Express API + hardening + AI fallback
-src/App.tsx                # Shell app + tab router (analisis/riwayat/template)
-src/components/            # Sidebar, Header, InputSection, ResultsSection,
-                           # RiskCard, QuotaCard, JsonViewer, DocumentInfoSidebar
-src/data/contohDokumen.ts  # Contoh dokumen uji
-src/types.ts               # HasilAnalisis, ItemRisiko, ContohDokumen
-tests/analyze.test.ts      # 6 test backend (node:test)
-docs/IMPLEMENTATION_PLAN.md# Rencana integrasi: Fase 0-5
+```powershell
+npm ci
+Copy-Item .env.example .env
+# Isi GEMINI_API_KEY di .env; jangan commit secret.
+npm run dev
 ```
 
-## Instalasi
+Buka http://localhost:3000 untuk landing; `/app` untuk ruang analisis.
+Tanpa API key, UI tetap dapat dibuka dan API analisis mengembalikan 503 yang jelas.
 
-```bash
-npm install
-cp .env.example .env   # lalu isi GEMINI_API_KEY
-npm run dev            # http://localhost:3000
+## Fitur MVP
+
+- Landing: penjelasan produk, ilustrasi, cara kerja, lima fokus dan FAQ.
+- Input 50.000 karakter, tiga contoh, impor TXT maksimal 200 KB dan DOCX maksimal 2 MB.
+- PDF berbasis teks maksimal 5 MB / 50 halaman: parsing lokal dengan worker PDF.js, timeout 20 detik, tanpa OCR. Halaman tanpa teks ditolak agar tidak menghasilkan impor parsial secara diam-diam.
+- Bandingkan versi di `/app/bandingkan`: perbedaan per baris, maksimal 500 baris per versi, tanpa API/kuota. Impor dua dokumen atau gunakan teks editor, lalu buka versi baru di editor analisis.
+- DOCX diekstrak lokal dalam worker berbatas waktu; teks utama saja, bukan gambar/header/catatan kaki. Tinjau teks sebelum analisis.
+- URL tab `/app/riwayat` dan `/app/contoh`, browser Back/reload, menu mobile dengan focus trap.
+- Request identik bersamaan dari IP sama digabung menjadi satu panggilan AI dan satu penggunaan kuota.
+- Gemini fallback, schema runtime per item, timeout total 60 detik.
+- Kartu/filter risiko, statistik, skor heuristik, salin, ekspor JSON.
+- Cetak/simpan PDF menggunakan dialog browser.
+- Riwayat opsional di browser ini, maksimal 10 analisis, dapat dihapus.
+- Kuota 3 keberhasilan AI per IP/hari UTC; gagal tidak dihitung; cache hit gratis.
+- Rate limit 10 request analisis/10 menit/IP, termasuk request cache dan invalid.
+
+## Pemeriksaan dan production
+
+```text
+npm run lint
+npm test
+npm run build
+npx playwright install chromium
+npm run test:e2e
+npm start
 ```
+
+`lint` adalah pemeriksaan TypeScript strict. Browser tests menjalankan hasil
+build production pada port 4173 untuk desktop/mobile. Hasil sukses AI di browser
+menggunakan mock API; kontrak backend memakai fake provider. Tidak ada panggilan
+AI berbayar dalam test. Build menghasilkan `dist/client/` (publik) dan
+`dist/server.mjs` (privat). `npm start` otomatis memakai mode production.
+`npm run preview` hanya preview statis, tanpa API Express.
 
 ## Environment
 
-| Variabel       | Wajib | Default                                                   | Keterangan                                    |
-|----------------|-------|-----------------------------------------------------------|-----------------------------------------------|
-| `GEMINI_API_KEY` | Ya  | -                                                         | Kunci Gemini API (Secrets AI Studio / `.env`) |
-| `PORT`         | Tidak | `3000`                                                    | Port HTTP server                              |
-| `GEMINI_MODELS`| Tidak | `gemini-3.6-flash,gemini-3.8-flash,gemini-3.1-flash-lite` | Model kandidat, dicoba berurutan              |
-| `APP_URL`      | Tidak | -                                                         | Bila disetel: whitelist origin CORS           |
+| Variabel           | Default / fungsi                                           |
+| ------------------ | ---------------------------------------------------------- |
+| `GEMINI_API_KEY`   | Wajib untuk analisis nyata; hanya dibaca server            |
+| `GEMINI_MODELS`    | `gemini-3.8-flash,gemini-3.1-flash-lite`, dicoba berurutan |
+| `PORT`             | `3000`                                                     |
+| `APP_URL`          | Kosong; origin CORS tambahan dipisah koma jika diperlukan  |
+| `TRUST_PROXY_HOPS` | `0`; atur jumlah hop berdasarkan proxy deployment          |
+| `DISABLE_HMR`      | `true` untuk menonaktifkan HMR development                 |
 
-## Scripts
-
-| Script          | Perintah              |
-|-----------------|-----------------------|
-| `npm run dev`   | `tsx server.ts` (Vite middleware) |
-| `npm run build` | Build frontend + bundle server ke `dist/` |
-| `npm start`     | Jalankan `dist/server.cjs` (production) |
-| `npm test`      | `tsx --test tests/` (6 test backend) |
-| `npm run lint`  | `tsc --noEmit`        |
+Default mengacu pada [model resmi Google](https://aistudio.google.com/docs/models).
+Akses aktual bergantung akun/region/kuota provider. AbortSignal mengikuti
+[SDK Google](https://googleapis.github.io/js-genai/release_docs/interfaces/types.GenerateContentConfig.html);
+pembatalan client tidak menjamin penghentian pemrosesan atau tagihan provider.
 
 ## API
 
-| Endpoint          | Method | Auth   | Keterangan                                              |
-|-------------------|--------|--------|---------------------------------------------------------|
-| `/api/health`     | GET    | -      | `{ status: "ok" }`                                      |
-| `/api/analyze`    | POST   | -      | Body `{ text }` (maks 50.000 char, teks polos, tanpa HTML/script); error aman 400/429/503 + `Retry-After` |
-| `/api/quotas/me`  | GET    | -      | `{ plan: "tamu", used, limit, remaining, resetAt }` (per IP/hari; Bearer menyusul Fase 2) |
+| Endpoint             | Respons                                                         |
+| -------------------- | --------------------------------------------------------------- |
+| `GET /api/health`    | 200: proses hidup                                               |
+| `GET /api/ready`     | 200: key disetel; 503: belum dikonfigurasi. Bukan ping provider |
+| `GET /api/quotas/me` | `plan`, `used`, `pending`, `limit`, `remaining`, `resetAt`      |
+| `POST /api/analyze`  | Body `{ "text": "..." }`; respons `{ "daftar_risiko": [...] }`  |
 
-## Batasan dan Keamanan
+Risiko memiliki `pasal_terkait`, `tingkat_risiko` (Tinggi/Sedang/Rendah), dan
+`penjelasan_bahasa_manusia`. `X-Cache`: HIT/MISS/COALESCED. Error JSON memuat `error`;
+400/413 untuk input, 429 untuk pembatasan, 503 untuk AI unavailable, 500 untuk
+kegagalan tak terduga. 429/503 menyertakan Retry-After.
 
-- Validasi: teks kosong/HTML/melebihi 50.000 char/estimasi > 30.000 token → 400
-- Rate-limit dan kuota dihitung per IP (`trust proxy` aktif untuk deploy di balik proxy)
-- Pesan error ke klien disanitasi; detail internal hanya di log server
-- Bundle `dist/server.cjs` diblokir dari static publik (404)
-- Tier gratis Gemini dapat dipakai untuk training oleh provider — jangan kirim data sangat sensitif (KTP, password); opsi hapus riwayat direncanakan Fase 2+
+## Data dan batas operasional
 
-## Roadmap
+Teks dikirim ke Gemini. Hasil memuat kutipan dan di-cache di memori 24 jam,
+maksimal 500 entri. Dokumen lengkap tidak disimpan di server. Riwayat lokal opt-in
+menyimpan teks dan hasil; penghapusan lokal tidak menghapus cache server.
+Log aplikasi berisi metadata, bukan isi dokumen/raw error provider.
 
-Lihat `docs/IMPLEMENTATION_PLAN.md`: Fase 0 (AI Router Gemini + Groq), Fase 2 (Auth Firebase + Firestore), Fase 3 (Landing + gate tamu 3x/hari), Fase 4 (upload PDF/DOCX/URL, export PDF, compare template).
+Kuota/cache/rate limit berada dalam satu proses: restart menghapus state.
+Deploy satu instance untuk MVP. Beberapa replica memerlukan shared store.
+Pengguna pada IP publik yang sama berbagi kuota. Reset 00.00 UTC / 07.00 WIB.
+Cache tetap dapat dibaca ketika kuota habis, dengan rate limit tetap berlaku.
 
-## Lisensi
+## Struktur dan dokumen
 
-Apache-2.0
+- `server.ts`: API, kuota/cache, AI, middleware dan startup.
+- `src/analysis.ts`, `src/types.ts`: kontrak, validasi dan statistik bersama.
+- `src/App.tsx`: orkestrasi workspace dan request.
+- `src/components/`: landing, input, hasil, sidebar, clipboard.
+- `src/history.ts`, `src/export.ts`: storage lokal dan ekspor.
+- `tests/`: kontrak/backend dan browser regression.
+- [PRD](docs/PRD.md): overview, business, UI/UX dan acceptance criteria.
+- [Arsitektur dan operasi](docs/ARCHITECTURE.md).
+- [Roadmap dan backlog](docs/IMPLEMENTATION_PLAN.md).
+- [Hasil verifikasi](docs/VERIFICATION.md).
+- [Harness evaluasi AI](docs/AI_EVALUATION.md).
+
+Evaluasi engineering: `npm run eval:ai` menampilkan delapan fixture sintetis tanpa
+memanggil provider. `npm run eval:ai -- --live` menggunakan API key dan dapat
+menimbulkan biaya; laporannya mencakup deteksi risiko, kutipan verbatim, latensi,
+dan model. Label belum direview ahli sehingga bukan ukuran akurasi hukum.
+
+Firebase Auth/Firestore, OCR, URL ingestion, perbandingan risiko semantik,
+dan provider kedua belum diimplementasikan; lihat backlog untuk dependensinya.

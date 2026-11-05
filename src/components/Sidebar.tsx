@@ -1,5 +1,11 @@
-import React from "react";
-import { FileText, History, BookOpen, Shield, Sparkles, CheckCircle } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  FileText,
+  History,
+  BookOpen,
+  Shield,
+  ArrowRightLeft,
+} from "lucide-react";
 import { QuotaCard } from "./QuotaCard";
 
 interface SidebarProps {
@@ -17,6 +23,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   quotaRefreshSignal = 0,
 }) => {
+  const panel = useRef<HTMLElement>(null);
+  const [mobile, setMobile] = useState(
+    () => !window.matchMedia("(min-width: 1024px)").matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const update = () => setMobile(!media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    if (!mobile || !isOpenMobile || !panel.current) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const content = document.getElementById("workspace-content");
+    const wasInert = content?.inert ?? false;
+    const overflow = document.body.style.overflow;
+    if (content) content.inert = true;
+    document.body.style.overflow = "hidden";
+    const buttons = () =>
+      Array.from(
+        panel.current!.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), a[href], [tabindex="0"]',
+        ),
+      );
+    buttons()[0]?.focus();
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const items = buttons();
+      const first = items[0];
+      const last = items.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", trap);
+    return () => {
+      document.removeEventListener("keydown", trap);
+      if (content) content.inert = wasInert;
+      document.body.style.overflow = overflow;
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [mobile, isOpenMobile]);
   return (
     <>
       {/* Backdrop for mobile */}
@@ -28,6 +80,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
+        ref={panel}
+        role={mobile && isOpenMobile ? "dialog" : undefined}
+        aria-modal={mobile && isOpenMobile ? true : undefined}
+        aria-label="Menu utama"
+        inert={mobile && !isOpenMobile}
         id="app-sidebar"
         className={`fixed lg:static top-0 left-0 bottom-0 z-50 w-64 bg-[#0F172A] text-slate-100 flex flex-col transition-transform duration-200 shrink-0 ${
           isOpenMobile ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
@@ -50,6 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           {onCloseMobile && (
             <button
+              aria-label="Tutup menu"
               onClick={onCloseMobile}
               className="lg:hidden text-slate-400 hover:text-white p-1"
               type="button"
@@ -67,6 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             id="nav-analisis-dokumen"
+            aria-current={currentTab === "analisis" ? "page" : undefined}
             type="button"
             onClick={() => {
               setCurrentTab("analisis");
@@ -92,6 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             id="nav-riwayat-kontrak"
+            aria-current={currentTab === "riwayat" ? "page" : undefined}
             type="button"
             onClick={() => {
               setCurrentTab("riwayat");
@@ -117,6 +177,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             id="nav-library-template"
+            aria-current={currentTab === "template" ? "page" : undefined}
             type="button"
             onClick={() => {
               setCurrentTab("template");
@@ -137,19 +198,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <BookOpen className="w-3.5 h-3.5" />
             </div>
-            <span>Library Template</span>
+            <span>Contoh Dokumen</span>
           </button>
 
+          <button
+            id="nav-compare"
+            aria-current={currentTab === "compare" ? "page" : undefined}
+            type="button"
+            onClick={() => {
+              setCurrentTab("compare");
+              onCloseMobile?.();
+            }}
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium ${currentTab === "compare" ? "border border-blue-500/20 bg-blue-600/15 text-blue-400" : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"}`}
+          >
+            <ArrowRightLeft size={20} />
+            <span>Bandingkan Versi</span>
+          </button>
           <div className="pt-6 px-3 pb-2 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-            Standar Standarisasi
+            Tentang hasil
           </div>
           <div className="px-3 py-2 text-xs text-slate-400 bg-slate-900/60 rounded-lg border border-slate-800/60 space-y-1.5">
             <div className="flex items-center gap-1.5 text-blue-400 font-semibold text-[11px]">
               <Shield className="h-3 w-3" />
-              <span>Strict JSON Output</span>
+              <span>Tinjau kembali konteks asli</span>
             </div>
             <p className="text-[11px] text-slate-400 leading-tight">
-              Schema compliant: <code className="text-slate-300 font-mono">daftar_risiko</code>
+              Temuan AI adalah bantuan membaca dan bukan nasihat hukum.
             </p>
           </div>
         </nav>

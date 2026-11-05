@@ -1,11 +1,12 @@
 import React from "react";
-import { Menu, Download, UploadCloud, RefreshCw, FileText } from "lucide-react";
+import { Menu, Download, UploadCloud } from "lucide-react";
 
 interface HeaderProps {
   onToggleMobileSidebar?: () => void;
   onNewAnalysis?: () => void;
   onExportJson?: () => void;
   hasResult?: boolean;
+  isMobileSidebarOpen?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -13,6 +14,7 @@ export const Header: React.FC<HeaderProps> = ({
   onNewAnalysis,
   onExportJson,
   hasResult = false,
+  isMobileSidebarOpen = false,
 }) => {
   return (
     <header
@@ -26,6 +28,9 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onToggleMobileSidebar}
             className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 lg:hidden"
             title="Buka Menu"
+            aria-label="Buka menu"
+            aria-expanded={isMobileSidebarOpen}
+            aria-controls="app-sidebar"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -34,7 +39,9 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm">
           <span className="text-slate-400 font-medium">Home</span>
           <span className="text-slate-300">/</span>
-          <span className="font-semibold text-slate-800">Analisis Dokumen Legal</span>
+          <span className="font-semibold text-slate-800">
+            Analisis Dokumen Legal
+          </span>
           <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
             ToS & Kontrak
           </span>
@@ -45,6 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
         {hasResult && onExportJson && (
           <button
             id="btn-header-export-json"
+            aria-label="Ekspor JSON"
             type="button"
             onClick={onExportJson}
             className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-slate-600 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 transition-colors flex items-center gap-1.5"

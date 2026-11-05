@@ -14,16 +14,23 @@ interface QuotaCardProps {
 
 export const QuotaCard: React.FC<QuotaCardProps> = ({ refreshSignal = 0 }) => {
   const [quota, setQuota] = useState<QuotaInfo | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/quotas/me")
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (!res.ok) throw new Error("quota");
+        return res.json();
+      })
       .then((data) => {
-        if (!cancelled && data) setQuota(data);
+        if (!cancelled && data && typeof data.remaining === "number") {
+          setQuota(data);
+          setFailed(false);
+        }
       })
       .catch(() => {
-        // Tampilkan fallback; jangan pecahkan sidebar bila endpoint belum siap.
+        if (!cancelled) setFailed(true);
       });
     return () => {
       cancelled = true;
@@ -44,13 +51,21 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({ refreshSignal = 0 }) => {
         </span>
       </div>
       <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
-        <div className="bg-blue-500 h-full rounded-full" style={{ width: `${pct}%` }}></div>
+        <div
+          className="bg-blue-500 h-full rounded-full"
+          style={{ width: `${pct}%` }}
+        ></div>
       </div>
       <p className="mt-2 text-[11px] text-slate-400 flex items-center justify-between">
         <span>Sisa analisis hari ini</span>
         <span className="font-mono text-slate-300">
           {quota ? `${remaining}/${limit}` : "..."}
         </span>
+      </p>
+      <p className="mt-2 text-[10px] leading-relaxed">
+        {failed
+          ? "Kuota belum dapat diperbarui."
+          : "Reset 00.00 UTC / 07.00 WIB. Cache gratis; analisis gagal tidak dihitung."}
       </p>
     </div>
   );

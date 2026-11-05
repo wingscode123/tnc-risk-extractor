@@ -1,53 +1,54 @@
 import React from "react";
 import { HasilAnalisis } from "../types";
-import { ShieldAlert, AlertTriangle, CheckCircle, Scale, ShieldCheck, FileText } from "lucide-react";
+import { riskSummary } from "../analysis";
 
 interface DocumentInfoSidebarProps {
   inputText: string;
   result: HasilAnalisis | null;
   isLoading: boolean;
+  analyzedAt?: string;
 }
 
 export const DocumentInfoSidebar: React.FC<DocumentInfoSidebarProps> = ({
   inputText,
   result,
   isLoading,
+  analyzedAt,
 }) => {
   const items = result?.daftar_risiko || [];
-  const highCount = items.filter((item) =>
-    item.tingkat_risiko?.toLowerCase().includes("tinggi")
-  ).length;
-  const mediumCount = items.filter((item) =>
-    item.tingkat_risiko?.toLowerCase().includes("sedang")
-  ).length;
+  const summary = result ? riskSummary(result) : null;
+  const highCount = summary?.Tinggi ?? 0;
+  const mediumCount = summary?.Sedang ?? 0;
 
-  const totalWords = inputText.trim() ? inputText.trim().split(/\s+/).length : 0;
+  const totalWords = inputText.trim()
+    ? inputText.trim().split(/\s+/).length
+    : 0;
   const totalChars = inputText.length;
 
-  // Calculate a representative safety score (100 is pristine, deduct 20 for high risk, 10 for medium)
-  const safetyScore = result
-    ? Math.max(10, Math.min(100, 100 - highCount * 25 - mediumCount * 12))
-    : null;
+  // Display-only heuristic; not a legal assessment.
+  const safetyScore = summary?.score ?? null;
 
   const scoreColor =
     safetyScore === null
       ? "text-slate-400"
       : safetyScore < 50
-      ? "text-red-500"
-      : safetyScore < 80
-      ? "text-orange-500"
-      : "text-emerald-500";
+        ? "text-red-500"
+        : safetyScore < 80
+          ? "text-orange-500"
+          : "text-emerald-500";
 
   // Document name heuristic
   const firstLine = inputText.trim().split("\n")[0] || "Dokumen_Perjanjian.txt";
   const docName =
-    firstLine.length > 35 ? firstLine.slice(0, 32) + "..." : firstLine || "Draft_Perjanjian_v1.txt";
+    firstLine.length > 35
+      ? firstLine.slice(0, 32) + "..."
+      : firstLine || "Draft_Perjanjian_v1.txt";
 
   const currentDate = new Intl.DateTimeFormat("id-ID", {
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(new Date());
+  }).format(analyzedAt ? new Date(analyzedAt) : new Date());
 
   return (
     <div className="flex flex-col gap-6">
@@ -65,18 +66,25 @@ export const DocumentInfoSidebar: React.FC<DocumentInfoSidebarProps> = ({
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">Tanggal Analisis</p>
-            <p className="text-sm font-semibold text-slate-800">{currentDate}</p>
+            <p className="text-sm font-semibold text-slate-800">
+              {isLoading
+                ? "Sedang dianalisis"
+                : analyzedAt
+                  ? currentDate
+                  : "Belum dianalisis"}
+            </p>
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">Kapasitas Teks</p>
             <p className="text-sm font-semibold text-slate-800">
-              {totalWords.toLocaleString()} Kata &bull; {totalChars.toLocaleString()} Karakter
+              {totalWords.toLocaleString()} Kata &bull;{" "}
+              {totalChars.toLocaleString()} Karakter
             </p>
           </div>
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
             <span
               className="text-sm font-medium text-slate-700 underline decoration-dotted underline-offset-2 cursor-help"
-              title="Skor heuristik sementara: 100 − 25 per risiko Tinggi − 12 per risiko Sedang. Skor resmi dari AI menyusul di Fase 4."
+              title="Heuristik: 100 dikurangi 25 per risiko Tinggi dan 12 per risiko Sedang, minimum 0. Bukan penilaian hukum atau jaminan keamanan."
             >
               Skor Estimasi (beta)
             </span>
@@ -116,7 +124,9 @@ export const DocumentInfoSidebar: React.FC<DocumentInfoSidebarProps> = ({
           <div className="flex items-center justify-between py-1">
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-blue-400"></span>
-              <span className="text-sm text-slate-600">Total Klausul Terdeteksi</span>
+              <span className="text-sm text-slate-600">
+                Total Klausul Terdeteksi
+              </span>
             </div>
             <span className="font-bold text-slate-900 font-mono text-base">
               {items.length < 10 ? `0${items.length}` : items.length}

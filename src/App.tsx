@@ -1,101 +1,168 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import React, { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  BookOpen,
+  Clock,
+  FileText,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { DocumentInfoSidebar } from "./components/DocumentInfoSidebar";
 import { InputSection } from "./components/InputSection";
 import { ResultsSection } from "./components/ResultsSection";
-import { HasilAnalisis } from "./types";
+import { LandingPage } from "./components/LandingPage";
+import { PrintReport } from "./components/PrintReport";
 import { CONTOH_DOKUMEN } from "./data/contohDokumen";
-import { AlertCircle, ShieldCheck, FileCheck2, BookOpen, Clock } from "lucide-react";
+import { isAnalysis, MAX_TEXT_LENGTH } from "./analysis";
+import { exportJson } from "./export";
+import { readHistory, writeHistory, type SavedAnalysis } from "./history";
+import { useWorkspaceRoute } from "./useWorkspaceRoute";
+import { CompareSection } from "./components/CompareSection";
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<string>("analisis");
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
-
-  // Pre-load with sample from prompt for immediate testing
-  const [inputText, setInputText] = useState<string>(CONTOH_DOKUMEN[1].teks);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const { inWorkspace, currentTab, setCurrentTab, navigate } =
+    useWorkspaceRoute();
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [inputText, setInputText] = useState("");
+  const [comparisonTexts, setComparisonTexts] = useState<[string, string]>([
+    "",
+    "",
+  ]);
+  const [documentRevision, setDocumentRevision] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<HasilAnalisis | null>(null);
-  const [quotaSignal, setQuotaSignal] = useState<number>(0);
+  const [analysis, setAnalysis] = useState<SavedAnalysis | null>(null);
+  const [quotaSignal, setQuotaSignal] = useState(0);
+  const [saveLocally, setSaveLocally] = useState(false);
+  const [history, setHistory] = useState<SavedAnalysis[]>([]);
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const request = useRef<AbortController | null>(null);
 
-  const handleAnalyze = async () => {
-    if (!inputText.trim()) return;
+  useEffect(() => {
+    try {
+      setHistory(readHistory());
+    } catch {
+      setStorageError(
+        "Riwayat lokal tidak dapat dibaca. Hasil analisis tetap dapat digunakan.",
+      );
+    }
+    return () => {
+      request.current?.abort();
+    };
+  }, []);
+  useEffect(() => {
+    if (!isMobileSidebarOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsMobileSidebarOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [isMobileSidebarOpen]);
 
+  const changeDocument = (text: string) => {
+    setDocumentRevision((v) => v + 1);
+    request.current?.abort();
+    request.current = null;
+    setIsLoading(false);
+    setInputText(text);
+    setAnalysis(null);
+    setError(null);
+  };
+  const persist = (next: SavedAnalysis[]) => {
+    try {
+      writeHistory(next);
+      setHistory(next);
+      setStorageError(null);
+    } catch {
+      setStorageError(
+        "Penyimpanan browser tidak tersedia atau penuh. Perubahan riwayat belum tersimpan. Unduh JSON untuk menyimpan hasil.",
+      );
+    }
+  };
+  const analyze = async () => {
+    if (
+      request.current ||
+      !inputText.trim() ||
+      inputText.length > MAX_TEXT_LENGTH
+    )
+      return;
+    const controller = new AbortController();
+    request.current = controller;
+    const text = inputText;
     setIsLoading(true);
     setError(null);
-
+    setAnalysis(null);
+    const timeout = setTimeout(() => controller.abort("timeout"), 65_000);
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ text: inputText }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal: controller.signal,
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        let msg = data.error;
-        if (typeof msg === "string") {
-          try {
-            const parsedError = JSON.parse(msg);
-            if (parsedError?.error?.message) {
-              msg = parsedError.error.message;
-            }
-          } catch {
-            // Keep original string if not JSON
-          }
-        }
-        if (typeof msg === "string" && (msg.includes("503") || msg.includes("high demand") || msg.includes("UNAVAILABLE"))) {
-          msg = "Model AI sedang mengalami lonjakan permintaan sesaat dari server Google. Silakan klik tombol 'Coba Lagi' di bawah ini.";
-        }
-        throw new Error(msg || "Terjadi kesalahan saat memproses dokumen.");
-      }
-
-      if (!data || !Array.isArray(data.daftar_risiko)) {
-        throw new Error("Respon analisis tidak sesuai dengan format daftar_risiko.");
-      }
-
-      setResult(data);
-    } catch (err: any) {
-      console.error("Error analyzing:", err);
-      setError(err.message || "Gagal menghubungi server analisis.");
+      const data: unknown = await response.json().catch(() => {
+        throw new Error(
+          "Respons server tidak dapat dibaca. Silakan coba lagi.",
+        );
+      });
+      if (!response.ok)
+        throw new Error(
+          data &&
+            typeof data === "object" &&
+            "error" in data &&
+            typeof data.error === "string"
+            ? data.error
+            : "Analisis gagal. Silakan coba lagi.",
+        );
+      if (!isAnalysis(data))
+        throw new Error(
+          "Format hasil analisis tidak valid. Silakan coba lagi.",
+        );
+      if (request.current !== controller) return;
+      const saved: SavedAnalysis = {
+        id: crypto.randomUUID(),
+        text,
+        result: data,
+        analyzedAt: new Date().toISOString(),
+      };
+      setAnalysis(saved);
+      if (saveLocally) persist([saved, ...history].slice(0, 10));
+    } catch (err) {
+      if (request.current === controller)
+        setError(
+          controller.signal.aborted
+            ? "Waktu tunggu habis. Coba lagi; server mungkin masih menyelesaikan analisis."
+            : err instanceof Error
+              ? err.message
+              : "Gagal menghubungi server.",
+        );
     } finally {
-      setIsLoading(false);
+      clearTimeout(timeout);
+      if (request.current === controller) {
+        request.current = null;
+        setIsLoading(false);
+      }
       setQuotaSignal((s) => s + 1);
     }
   };
-
-  const handleNewAnalysis = () => {
-    setInputText("");
-    setResult(null);
-    setError(null);
-  };
-
-  const handleExportJson = () => {
-    if (!result) return;
-    const jsonString = JSON.stringify(result, null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `lexguard-analisis-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  if (!inWorkspace)
+    return (
+      <LandingPage
+        onStart={(sample) => {
+          if (sample) changeDocument(CONTOH_DOKUMEN[1].teks);
+          setCurrentTab("analisis");
+        }}
+      />
+    );
 
   return (
-    <div className="flex min-h-screen w-full bg-[#F8FAFC] font-sans text-slate-900">
-      {/* Dark Sidebar matching Design HTML */}
+    <div className="workspace flex min-h-screen bg-slate-50 text-slate-900">
+      <a className="skip-link" href="#workspace-main">
+        Lewati ke konten
+      </a>
       <Sidebar
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
@@ -103,160 +170,260 @@ export default function App() {
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         quotaRefreshSignal={quotaSignal}
       />
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header */}
+      <div id="workspace-content" className="flex min-w-0 flex-1 flex-col">
         <Header
-          onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-          onNewAnalysis={handleNewAnalysis}
-          onExportJson={handleExportJson}
-          hasResult={Boolean(result)}
+          isMobileSidebarOpen={isMobileSidebarOpen}
+          onToggleMobileSidebar={() => setIsMobileSidebarOpen((v) => !v)}
+          onNewAnalysis={() => {
+            changeDocument("");
+            setCurrentTab("analisis");
+          }}
+          onExportJson={() => analysis && exportJson(analysis.result)}
+          hasResult={!!analysis}
         />
-
-        {/* Tab Router / View Controller */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+        <main id="workspace-main" className="flex-1 p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto mb-6 flex max-w-7xl flex-wrap items-center justify-between gap-3 print:hidden">
+            <button
+              onClick={() => navigate(false)}
+              className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-blue-700"
+            >
+              <ArrowLeft size={16} /> Beranda
+            </button>
+            <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs text-blue-700">
+              Ruang analisis · akses tamu
+            </span>
+          </div>
+          {storageError && (
+            <p
+              role="status"
+              className="mx-auto mb-4 max-w-7xl rounded-lg bg-amber-50 p-3 text-sm text-amber-900"
+            >
+              {storageError}
+            </p>
+          )}
           {currentTab === "analisis" && (
-            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Left Column (col-span-4): Document Metadata & Risk Statistics */}
-              <div className="lg:col-span-4">
+            <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-6 lg:grid-cols-12">
+              <div className="order-2 lg:order-1 lg:col-span-4">
                 <DocumentInfoSidebar
-                  inputText={inputText}
-                  result={result}
+                  inputText={analysis?.text ?? inputText}
+                  result={analysis?.result ?? null}
                   isLoading={isLoading}
+                  analyzedAt={analysis?.analyzedAt}
                 />
               </div>
-
-              {/* Right Column (col-span-8): Input Document & Risk Findings */}
-              <div className="lg:col-span-8 space-y-6">
+              <div className="order-1 space-y-6 lg:order-2 lg:col-span-8">
                 <InputSection
+                  documentRevision={documentRevision}
                   inputText={inputText}
-                  setInputText={setInputText}
+                  setInputText={changeDocument}
                   isLoading={isLoading}
-                  onAnalyze={handleAnalyze}
+                  onAnalyze={analyze}
                 />
-
+                <div className="privacy-note rounded-xl border border-slate-200 bg-white p-4 text-xs leading-relaxed text-slate-600">
+                  <p>
+                    <strong>Perhatikan sebelum mengirim.</strong> Teks dikirim
+                    ke Gemini untuk diproses. Hasil disimpan di cache memori
+                    server hingga 24 jam. Hindari data identitas, password, dan
+                    rahasia usaha. Hasil bukan nasihat hukum.
+                  </p>
+                  <label className="mt-3 flex cursor-pointer items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={saveLocally}
+                      disabled={isLoading}
+                      onChange={(e) => setSaveLocally(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    Simpan analisis berikutnya di browser ini (maks. 10,
+                    termasuk teks). Gunakan hanya pada perangkat pribadi.
+                  </label>
+                </div>
                 {error && (
                   <div
-                    id="error-banner"
-                    className="p-4 rounded-xl border border-red-200 bg-red-50 text-red-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+                    role="alert"
+                    className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
                   >
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                      <div>
-                        <h3 className="text-sm font-bold">Gagal Menganalisis Dokumen</h3>
-                        <p className="text-xs sm:text-sm mt-0.5 text-red-700">{error}</p>
-                      </div>
+                    <AlertCircle size={20} className="shrink-0" />
+                    <div>
+                      <p className="font-semibold">Analisis belum berhasil</p>
+                      <p className="mt-1">{error}</p>
+                      <button
+                        onClick={analyze}
+                        disabled={isLoading}
+                        className="mt-3 font-semibold underline disabled:opacity-50"
+                      >
+                        Coba lagi
+                      </button>
                     </div>
-                    <button
-                      id="btn-retry-analysis"
-                      type="button"
-                      onClick={handleAnalyze}
-                      disabled={isLoading}
-                      className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-colors shrink-0 self-start sm:self-center disabled:opacity-50"
-                    >
-                      Coba Lagi
-                    </button>
                   </div>
                 )}
-
-                {result && <ResultsSection result={result} />}
-
-                {!result && !isLoading && !error && (
-                  <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-xs text-center">
-                    <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
-                      <ShieldCheck className="w-6 h-6" />
+                {isLoading && (
+                  <p
+                    role="status"
+                    className="rounded-xl bg-blue-50 p-4 text-sm text-blue-800"
+                  >
+                    Sedang meninjau dokumen. Proses dapat memerlukan hingga satu
+                    menit.
+                  </p>
+                )}
+                {analysis && (
+                  <>
+                    <div className="result-actions flex flex-wrap justify-end gap-3">
+                      <button
+                        className="text-sm font-medium text-blue-700 underline"
+                        onClick={() => window.print()}
+                      >
+                        Cetak / simpan PDF
+                      </button>
                     </div>
-                    <h3 className="text-sm font-bold text-slate-800">
-                      Siap Menganalisis Dokumen
-                    </h3>
-                    <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
-                      Klik <strong>"Analisis Risiko Sekarang"</strong> di atas untuk memindai dokumen dan menghasilkan daftar risiko terstruktur (Strict JSON).
+                    <ResultsSection
+                      key={analysis.id}
+                      result={analysis.result}
+                    />
+                    <PrintReport analysis={analysis} />
+                  </>
+                )}
+                {!analysis && !isLoading && !error && (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
+                    <ShieldCheck
+                      className="mx-auto mb-3 text-blue-600"
+                      size={32}
+                    />
+                    <h2 className="font-semibold">Mulai dengan dokumen Anda</h2>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Tempelkan teks, impor TXT/DOCX/PDF, atau pilih contoh.
+                      Temuan akan tampil di sini.
                     </p>
                   </div>
                 )}
               </div>
             </div>
           )}
-
           {currentTab === "riwayat" && (
-            <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 rounded-xl border border-slate-200 shadow-xs">
-              <div className="flex items-center gap-2 mb-4">
-                <Clock className="h-5 w-5 text-blue-600" />
-                <h2 className="text-base font-bold text-slate-800">Riwayat Kontrak Teranalisis</h2>
+            <section className="mx-auto max-w-4xl rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h1 className="flex items-center gap-2 text-xl font-semibold">
+                  <Clock size={22} /> Riwayat di perangkat ini
+                </h1>
+                {history.length > 0 && (
+                  <button
+                    onClick={() => persist([])}
+                    className="text-sm text-red-700 underline"
+                  >
+                    Hapus semua
+                  </button>
+                )}
               </div>
-              <p className="text-xs text-slate-500 mb-6">
-                Daftar sesi pemeriksaan ToS dan perjanjian legal yang telah dilakukan.
+              <p className="mb-6 text-sm text-slate-500">
+                Hanya analisis yang Anda pilih untuk disimpan. Menghapus riwayat
+                di sini tidak menghapus cache sementara server.
               </p>
-              <div className="space-y-3">
-                <div className="p-4 border border-slate-200 rounded-lg flex items-center justify-between hover:bg-slate-50 transition-colors">
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-900">Perjanjian Sewa Unit & Biaya Keterlambatan</h4>
-                    <span className="text-xs text-slate-500 font-mono">2 Klausul Berisiko &bull; Skor 42/100</span>
-                  </div>
+              {history.length === 0 ? (
+                <div className="py-12 text-center">
+                  <FileText className="mx-auto mb-3 text-slate-400" />
+                  <h2 className="font-semibold">
+                    Belum ada analisis tersimpan
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Aktifkan penyimpanan lokal di ruang analisis untuk menyimpan
+                    hasil berikutnya.
+                  </p>
                   <button
-                    onClick={() => {
-                      setInputText(CONTOH_DOKUMEN[1].teks);
-                      setCurrentTab("analisis");
-                    }}
-                    type="button"
-                    className="text-xs text-blue-600 font-medium hover:underline"
+                    onClick={() => setCurrentTab("analisis")}
+                    className="mt-5 text-sm text-blue-700 underline"
                   >
-                    Buka Dokumen &rarr;
+                    Mulai analisis
                   </button>
                 </div>
-                <div className="p-4 border border-slate-200 rounded-lg flex items-center justify-between hover:bg-slate-50 transition-colors">
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-900">Ketentuan Layanan & Pelacakan Lokasi Pengguna</h4>
-                    <span className="text-xs text-slate-500 font-mono">1 Klausul Risiko Tinggi &bull; Skor 75/100</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setInputText(CONTOH_DOKUMEN[0].teks);
-                      setCurrentTab("analisis");
-                    }}
-                    type="button"
-                    className="text-xs text-blue-600 font-medium hover:underline"
-                  >
-                    Buka Dokumen &rarr;
-                  </button>
-                </div>
-              </div>
-            </div>
+              ) : (
+                <ul className="space-y-3">
+                  {history.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-center gap-3 rounded-lg border border-slate-200 p-4"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <h2 className="truncate font-medium">
+                          {item.text.slice(0, 70)}
+                        </h2>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {new Date(item.analyzedAt).toLocaleString("id-ID")} ·{" "}
+                          {item.result.daftar_risiko.length} temuan
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          changeDocument(item.text);
+                          setAnalysis(item);
+                          setCurrentTab("analisis");
+                        }}
+                        className="text-sm font-semibold text-blue-700"
+                      >
+                        Buka
+                      </button>
+                      <button
+                        aria-label={`Hapus analisis ${item.text.slice(0, 30)}`}
+                        onClick={() =>
+                          persist(history.filter((h) => h.id !== item.id))
+                        }
+                        className="rounded p-2 text-slate-500 hover:bg-red-50 hover:text-red-700"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           )}
-
+          {currentTab === "compare" && (
+            <CompareSection
+              texts={comparisonTexts}
+              setTexts={setComparisonTexts}
+              editorText={inputText}
+              onAnalyzeText={(text) => {
+                changeDocument(text);
+                setCurrentTab("analisis");
+              }}
+            />
+          )}
           {currentTab === "template" && (
-            <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 rounded-xl border border-slate-200 shadow-xs">
-              <div className="flex items-center gap-2 mb-4">
-                <BookOpen className="h-5 w-5 text-blue-600" />
-                <h2 className="text-base font-bold text-slate-800">Library Template Dokumen</h2>
-              </div>
-              <p className="text-xs text-slate-500 mb-6">
-                Gunakan draf standar untuk menguji ketahanan klausul atau membandingkan klausul yang adil.
+            <section className="mx-auto max-w-4xl rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
+              <h1 className="flex items-center gap-2 text-xl font-semibold">
+                <BookOpen size={22} /> Contoh dokumen
+              </h1>
+              <p className="mt-3 text-sm text-slate-500">
+                Contoh ilustratif untuk mencoba pemeriksaan. Bukan template
+                kontrak yang disarankan atau disahkan secara hukum.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 {CONTOH_DOKUMEN.map((sample) => (
-                  <div key={sample.id} className="p-4 border border-slate-200 rounded-lg flex flex-col justify-between hover:border-blue-300 transition-colors">
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-900 mb-1">{sample.judul}</h4>
-                      <p className="text-xs text-slate-500 mb-3">{sample.deskripsi}</p>
-                    </div>
+                  <article
+                    key={sample.id}
+                    className="flex flex-col rounded-lg border border-slate-200 p-5"
+                  >
+                    <h2 className="font-semibold">{sample.judul}</h2>
+                    <p className="mt-2 flex-1 text-sm text-slate-500">
+                      {sample.deskripsi}
+                    </p>
                     <button
                       onClick={() => {
-                        setInputText(sample.teks);
+                        changeDocument(sample.teks);
                         setCurrentTab("analisis");
                       }}
-                      type="button"
-                      className="text-xs text-white bg-blue-600 hover:bg-blue-700 py-1.5 px-3 rounded-md font-medium text-center transition-colors"
+                      className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                     >
-                      Muat ke Editor
+                      Muat ke editor
                     </button>
-                  </div>
+                  </article>
                 ))}
               </div>
-            </div>
+            </section>
           )}
         </main>
+        <footer className="workspace-footer border-t border-slate-200 p-4 text-center text-xs text-slate-500">
+          LexGuard AI · Bantuan membaca dokumen, bukan nasihat hukum.
+        </footer>
       </div>
     </div>
   );

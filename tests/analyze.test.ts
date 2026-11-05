@@ -7,7 +7,7 @@ const EMPTY_RESULT = { daftar_risiko: [] };
 
 // Helper: jalankan app tanpa frontend di port acak (isolasi rate-limit/kuota/cache per test).
 async function startTestServer(
-  analyzeImpl?: (text: string) => Promise<{ result: any; modelUsed: string }>
+  analyzeImpl?: (text: string) => Promise<{ result: any; modelUsed: string }>,
 ) {
   const app = await createApp({
     withFrontend: false,
@@ -20,7 +20,7 @@ async function startTestServer(
     baseUrl: `http://127.0.0.1:${port}`,
     close: () =>
       new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve()))
+        server.close((err) => (err ? reject(err) : resolve())),
       ),
   };
 }
@@ -87,7 +87,7 @@ describe("POST /api/analyze — kegagalan AI aman", () => {
       },
     };
     const t = await startTestServer((text) =>
-      analyzeWithGeminiFallback(text, garbageClient as any)
+      analyzeWithGeminiFallback(text, garbageClient as any),
     );
     try {
       const r = await postAnalyze(t.baseUrl, { text: "Pasal 1: contoh." });
@@ -113,7 +113,8 @@ describe("analyzeWithGeminiFallback — fallback model", () => {
         models: {
           generateContent: async ({ model }: { model: string }) => {
             calls.push(model);
-            if (model === "model-gagal") throw new Error("UNAVAILABLE: overload");
+            if (model === "model-gagal")
+              throw new Error("UNAVAILABLE: overload");
             return {
               text: JSON.stringify({
                 daftar_risiko: [
@@ -130,7 +131,7 @@ describe("analyzeWithGeminiFallback — fallback model", () => {
       };
       const { result, modelUsed } = await analyzeWithGeminiFallback(
         "Pasal 1: contoh.",
-        client as any
+        client as any,
       );
       assert.deepEqual(calls, ["model-gagal", "model-ok"]);
       assert.equal(modelUsed, "model-ok");

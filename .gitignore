@@ -2,7 +2,8 @@ node_modules/
 build/
 dist/
 coverage/
-docs/
+test-results/
+playwright-report/
 .DS_Store
 *.log
 .env*

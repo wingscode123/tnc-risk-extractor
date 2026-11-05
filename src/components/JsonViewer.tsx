@@ -1,35 +1,27 @@
-import React, { useState } from "react";
+import React from "react";
 import { Copy, Check, Download, FileCode2 } from "lucide-react";
 import { HasilAnalisis } from "../types";
+import { exportJson } from "../export";
+import { useClipboard } from "./useClipboard";
 
 interface JsonViewerProps {
   data: HasilAnalisis;
 }
 
 export const JsonViewer: React.FC<JsonViewerProps> = ({ data }) => {
-  const [copied, setCopied] = useState(false);
+  const { status, copy } = useClipboard();
+  const copied = status === "Tersalin";
   const jsonString = JSON.stringify(data, null, 2);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(jsonString);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleDownload = () => {
-    const blob = new Blob([jsonString], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `analisis-risiko-legal-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    void copy(jsonString);
   };
 
   return (
-    <div id="json-viewer-container" className="border border-slate-300 rounded-xl bg-slate-900 text-slate-100 overflow-hidden shadow-sm">
+    <div
+      id="json-viewer-container"
+      className="border border-slate-300 rounded-xl bg-slate-900 text-slate-100 overflow-hidden shadow-sm"
+    >
       <div className="flex items-center justify-between px-4 py-3 bg-slate-950 border-b border-slate-800">
         <div className="flex items-center gap-2">
           <FileCode2 className="h-4 w-4 text-emerald-400" />
@@ -41,7 +33,7 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({ data }) => {
         <div className="flex items-center gap-2">
           <button
             id="btn-download-json"
-            onClick={handleDownload}
+            onClick={() => exportJson(data)}
             type="button"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
           >
@@ -76,6 +68,11 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({ data }) => {
       >
         <code>{jsonString}</code>
       </pre>
+      {status && (
+        <p role="status" className="p-3 text-xs">
+          {status}
+        </p>
+      )}
     </div>
   );
 };
